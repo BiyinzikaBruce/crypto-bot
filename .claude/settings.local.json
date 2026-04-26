@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp -r fxau/. .)",
+      "Bash(rm -rf fxau)",
+      "Bash(cp a:/projects/FUAX/fxau/pnpm-lock.yaml a:/projects/FUAX/)",
+      "Bash(rm -rf a:/projects/FUAX/fxau)"
+    ]
+  }
+}

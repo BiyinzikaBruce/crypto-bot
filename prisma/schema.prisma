@@ -1,0 +1,287 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+enum Role {
+  TRADER
+  ADMIN
+}
+
+enum Plan {
+  FREE
+  BASIC
+  PRO
+}
+
+enum StrategyStatus {
+  DRAFT
+  ACTIVE
+}
+
+enum Indicator {
+  RSI
+  MA
+  MACD
+  BB
+  STOCH
+}
+
+enum RuleCondition {
+  CROSSES_ABOVE
+  CROSSES_BELOW
+  GREATER_THAN
+  LESS_THAN
+}
+
+enum LogicOperator {
+  AND
+  OR
+}
+
+enum RuleType {
+  ENTRY
+  EXIT
+}
+
+enum BacktestStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum BotStatus {
+  RUNNING
+  STOPPED
+  ERROR
+}
+
+enum TradeDirection {
+  BUY
+  SELL
+}
+
+enum TradeStatus {
+  OPEN
+  CLOSED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+}
+
+enum TelegramNotificationType {
+  TRADE_OPENED
+  TRADE_CLOSED
+  BOT_STARTED
+  BOT_STOPPED
+}
+
+// ─── Models ─────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  role          Role      @default(TRADER)
+  plan          Plan      @default(FREE)
+  planExpiresAt DateTime?
+  telegramChatId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Better Auth relations
+  sessions      Session[]
+  accounts      Account[]
+
+  // App relations
+  mt5Account           MT5Account?
+  strategies           Strategy[]
+  bots                 Bot[]
+  trades               Trade[]
+  subscription         Subscription?
+  telegramNotifications TelegramNotification[]
+  backtests            Backtest[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                    String  @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([identifier, value])
+}
+
+model MT5Account {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  login           String
+  password        String
+  server          String
+  isConnected     Boolean   @default(false)
+  lastConnectedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bots Bot[]
+}
+
+model Strategy {
+  id        String         @id @default(cuid())
+  userId    String
+  name      String
+  pair      String
+  timeframe String
+  rules     Json           @default("[]")
+  status    StrategyStatus @default(DRAFT)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rules_rel StrategyRule[]
+  backtests Backtest[]
+  bots      Bot[]
+}
+
+model StrategyRule {
+  id            String        @id @default(cuid())
+  strategyId    String
+  indicator     Indicator
+  condition     RuleCondition
+  value         Float
+  logicOperator LogicOperator @default(AND)
+  ruleType      RuleType
+
+  strategy Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+}
+
+model Backtest {
+  id          String         @id @default(cuid())
+  strategyId  String
+  userId      String
+  fromDate    DateTime
+  toDate      DateTime
+  status      BacktestStatus @default(PENDING)
+  winRate     Float?
+  totalTrades Int?
+  resultLog   Json?
+  equityCurve Json?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  strategy Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Bot {
+  id           String    @id @default(cuid())
+  userId       String
+  strategyId   String
+  mt5AccountId String
+  name         String
+  status       BotStatus @default(STOPPED)
+  startedAt    DateTime?
+  stoppedAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategy   Strategy   @relation(fields: [strategyId], references: [id])
+  mt5Account MT5Account @relation(fields: [mt5AccountId], references: [id])
+  trades     Trade[]
+}
+
+model Trade {
+  id         String         @id @default(cuid())
+  botId      String
+  userId     String
+  pair       String
+  direction  TradeDirection
+  entryPrice Float
+  exitPrice  Float?
+  lotSize    Float
+  profit     Float?
+  openedAt   DateTime       @default(now())
+  closedAt   DateTime?
+  status     TradeStatus    @default(OPEN)
+
+  bot  Bot  @relation(fields: [botId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  plan                 Plan
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  stripePaymentIntentId String?
+  amount               Float
+  currency             String             @default("usd")
+  status               SubscriptionStatus @default(ACTIVE)
+  startsAt             DateTime           @default(now())
+  expiresAt            DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TelegramNotification {
+  id      String                   @id @default(cuid())
+  userId  String
+  type    TelegramNotificationType
+  message String
+  sentAt  DateTime                 @default(now())
+  success Boolean                  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
