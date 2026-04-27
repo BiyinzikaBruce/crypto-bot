@@ -1,13 +1,16 @@
+import dotenv from "dotenv";
 import { defineConfig } from "prisma/config";
 
-// DATABASE_URL is only needed for migrate, not for generate.
-// Spreading conditionally prevents Prisma from rejecting the config
-// when DATABASE_URL isn't available (e.g. during Vercel's build step).
+// Loads .env.local for local dev — no-op if the file doesn't exist (e.g. Vercel)
+dotenv.config({ path: ".env.local" });
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
   },
+  // Only set datasource when DATABASE_URL is available.
+  // prisma generate doesn't need a DB connection; prisma migrate does.
   ...(process.env.DATABASE_URL && {
     datasource: {
       url: process.env.DATABASE_URL,
