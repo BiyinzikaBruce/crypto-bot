@@ -98,6 +98,7 @@ model User {
   plan          Plan      @default(FREE)
   planExpiresAt DateTime?
   telegramChatId String?
+  bridgeKey     String?   @unique
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -249,6 +250,7 @@ model Trade {
   exitPrice  Float?
   lotSize    Float
   profit     Float?
+  mt5Ticket  Int?
   openedAt   DateTime       @default(now())
   closedAt   DateTime?
   status     TradeStatus    @default(OPEN)

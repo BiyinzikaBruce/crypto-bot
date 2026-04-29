@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useSession } from "@/lib/auth-client";
-import { Loader2, Link2, Link2Off, CheckCircle2, XCircle, Send } from "lucide-react";
+import { Loader2, Link2, Link2Off, CheckCircle2, XCircle, Send, Key, Copy, RefreshCw, Eye, EyeOff } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { cn } from "@/lib/utils";
 
@@ -428,7 +428,114 @@ export default function SettingsPage() {
         </section>
 
         <TelegramSection />
+        <BridgeKeySection />
       </div>
     </div>
+  );
+}
+
+// ─── Bridge Key section ───────────────────────────────────────────────────────
+
+function BridgeKeySection() {
+  const [bridgeKey, setBridgeKey] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [revealed, setRevealed] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/settings/bridge-key")
+      .then((r) => r.json())
+      .then((d) => { setBridgeKey(d.bridgeKey); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  async function generate() {
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/settings/bridge-key", { method: "POST" });
+      const d = await res.json();
+      setBridgeKey(d.bridgeKey);
+      setRevealed(true);
+      toast.success("Bridge key generated — copy it now");
+    } catch {
+      toast.error("Failed to generate key");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function copy() {
+    if (!bridgeKey) return;
+    navigator.clipboard.writeText(bridgeKey);
+    toast.success("Copied to clipboard");
+  }
+
+  const masked = bridgeKey ? "•".repeat(24) + bridgeKey.slice(-6) : null;
+
+  return (
+    <section className="bg-[var(--card)] border border-[var(--card-border)] rounded-xl p-6">
+      <div className="mb-5">
+        <h2 className="text-base font-semibold text-[var(--foreground)] flex items-center gap-2">
+          <Key className="h-4 w-4 text-primary-400" />
+          Python Bridge Key
+        </h2>
+        <p className="mt-0.5 text-[13px] text-slate-500">
+          Used by the Python Bridge script running on your PC to authenticate with FXAU and place real MT5 trades.
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-slate-500 py-2">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : bridgeKey ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <code className="flex-1 rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 font-mono text-[13px] text-slate-300">
+              {revealed ? bridgeKey : masked}
+            </code>
+            <button onClick={() => setRevealed((v) => !v)} title={revealed ? "Hide" : "Show"}
+              className="h-9 w-9 flex items-center justify-center rounded-lg border border-slate-700 text-slate-400 hover:text-[var(--foreground)] transition-colors">
+              {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+            <button onClick={copy} title="Copy"
+              className="h-9 w-9 flex items-center justify-center rounded-lg border border-slate-700 text-slate-400 hover:text-[var(--foreground)] transition-colors">
+              <Copy className="h-4 w-4" />
+            </button>
+            <button onClick={generate} disabled={generating} title="Regenerate"
+              className="h-9 w-9 flex items-center justify-center rounded-lg border border-slate-700 text-slate-400 hover:text-loss-400 transition-colors disabled:opacity-50">
+              {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            </button>
+          </div>
+          <p className="text-[12px] text-warning-400">
+            Keep this secret. Regenerating invalidates the old key immediately.
+          </p>
+        </div>
+      ) : (
+        <button onClick={generate} disabled={generating}
+          className="flex items-center gap-2 h-10 px-5 rounded-lg text-sm font-medium bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white transition-colors disabled:opacity-60">
+          {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Key className="h-4 w-4" />}
+          Generate Bridge Key
+        </button>
+      )}
+
+      {bridgeKey && (
+        <div className="mt-5 rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-[12px] font-mono text-slate-400 space-y-1">
+          <p className="text-slate-300 font-sans font-semibold text-[13px] mb-2">Quick setup (Windows)</p>
+          <p><span className="text-primary-400">1.</span> Install Python 3.10+ and MetaTrader5 terminal</p>
+          <p><span className="text-primary-400">2.</span> Download the bridge: <code className="text-slate-300">bridge/fxau_bridge.py</code> from the GitHub repo</p>
+          <p><span className="text-primary-400">3.</span> Run: <code className="text-profit-400">pip install MetaTrader5 requests python-dotenv</code></p>
+          <p><span className="text-primary-400">4.</span> Create <code className="text-slate-300">.env</code> next to the script:</p>
+          <div className="ml-4 mt-1 rounded bg-slate-800 px-3 py-2 text-slate-300 space-y-0.5">
+            <p>APP_URL=https://crypto-bot-orcin.vercel.app</p>
+            <p>BRIDGE_KEY=<span className="text-primary-400">{revealed ? bridgeKey : "<your-bridge-key>"}</span></p>
+            <p>MT5_LOGIN=<span className="text-slate-500">your_login</span></p>
+            <p>MT5_PASSWORD=<span className="text-slate-500">your_password</span></p>
+            <p>MT5_SERVER=<span className="text-slate-500">Exness-MT5Real</span></p>
+          </div>
+          <p className="mt-2"><span className="text-primary-400">5.</span> Run: <code className="text-profit-400">python fxau_bridge.py</code></p>
+        </div>
+      )}
+    </section>
   );
 }
