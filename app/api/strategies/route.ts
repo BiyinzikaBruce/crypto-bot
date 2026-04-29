@@ -80,18 +80,19 @@ export async function POST(request: NextRequest) {
     ];
 
     const strategy = await db.strategy.create({
-      data: {
-        userId,
-        name,
-        pair,
-        timeframe,
-        status: "DRAFT",
-        rules_rel: { create: allRules },
-      },
+      data: { userId, name, pair, timeframe, status: "DRAFT" },
+    });
+
+    await db.strategyRule.createMany({
+      data: allRules.map((r) => ({ ...r, strategyId: strategy.id })),
+    });
+
+    const strategyWithRules = await db.strategy.findUnique({
+      where: { id: strategy.id },
       include: { rules_rel: true },
     });
 
-    return NextResponse.json(strategy, { status: 201 });
+    return NextResponse.json(strategyWithRules, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
