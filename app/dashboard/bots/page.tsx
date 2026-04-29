@@ -174,7 +174,12 @@ function useColumns(onRefresh: () => void): ColumnDef<BotListItem>[] {
       accessorKey: "name",
       header: ({ column }) => <SortableColumn column={column} title="Bot" />,
       cell: ({ row }) => (
-        <span className="font-medium text-[var(--foreground)]">{row.original.name}</span>
+        <Link
+          href={`/dashboard/bots/${row.original.id}`}
+          className="font-medium text-[var(--foreground)] hover:text-primary-400 transition-colors"
+        >
+          {row.original.name}
+        </Link>
       ),
     },
     {

@@ -10,11 +10,13 @@ export async function GET(request: NextRequest) {
     const pair = searchParams.get("pair");
     const direction = searchParams.get("direction");
     const status = searchParams.get("status");
+    const botId = searchParams.get("botId");
 
     const where: Record<string, unknown> = { userId: session.user.id };
     if (pair) where.pair = pair;
     if (direction) where.direction = direction;
     if (status) where.status = status;
+    if (botId) where.botId = botId;
 
     const trades = await db.trade.findMany({
       where,
