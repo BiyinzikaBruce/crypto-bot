@@ -353,14 +353,14 @@ export default function NewStrategyPage() {
           toast.error(err.message);
           return;
         }
-        throw new Error(err.error ?? "Failed to save");
+        throw new Error(err.detail ?? err.error ?? "Failed to save");
       }
 
       const created = await res.json();
       toast.success("Strategy created");
       router.push(`/dashboard/strategies/${created.id}`);
-    } catch {
-      toast.error("Failed to create strategy");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to create strategy");
     } finally {
       setSaving(false);
     }

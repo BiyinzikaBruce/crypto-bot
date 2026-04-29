@@ -98,6 +98,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     console.error("Create strategy error:", error);
-    return NextResponse.json({ error: "Failed to create strategy" }, { status: 500 });
+    return NextResponse.json({
+      error: "Failed to create strategy",
+      detail: error instanceof Error ? error.message : String(error),
+    }, { status: 500 });
   }
 }
