@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Bot, Play, Square, Trash2, Zap, Loader2 } from "lucide-react";
+import { Bot, Play, Square, Trash2, Zap, Loader2, Radio } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/data-table";
@@ -24,7 +24,7 @@ interface BotListItem {
   _count: { trades: number };
 }
 
-// ─── Status indicator ─────────────────────────────────────────────────────────
+// ─── Status badge ─────────────────────────────────────────────────────────────
 
 function BotStatusBadge({ status }: { status: BotListItem["status"] }) {
   return (
@@ -39,11 +39,46 @@ function BotStatusBadge({ status }: { status: BotListItem["status"] }) {
       )}
     >
       {status === "RUNNING" && (
-        <span className="h-1.5 w-1.5 rounded-full bg-profit-400 bot-running-dot" />
+        <span className="h-1.5 w-1.5 rounded-full bg-profit-400 animate-pulse" />
       )}
       {status}
     </span>
   );
+}
+
+// ─── Auto-tick hook ───────────────────────────────────────────────────────────
+
+const TICK_INTERVAL_MS = 30_000; // 30 seconds
+
+function useAutoTick(
+  bots: BotListItem[],
+  onTick: (botId: string, result: string) => void
+) {
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const botsRef = useRef(bots);
+  botsRef.current = bots;
+
+  useEffect(() => {
+    async function tick() {
+      const running = botsRef.current.filter((b) => b.status === "RUNNING");
+      for (const bot of running) {
+        try {
+          const res = await fetch(`/api/bots/${bot.id}/tick`, { method: "POST" });
+          if (res.ok) {
+            const data = await res.json();
+            onTick(bot.id, data.result as string);
+          }
+        } catch {
+          // silent
+        }
+      }
+    }
+
+    intervalRef.current = setInterval(tick, TICK_INTERVAL_MS);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [onTick]);
 }
 
 // ─── Row actions ──────────────────────────────────────────────────────────────
@@ -63,25 +98,19 @@ function BotActions({ bot, onRefresh }: { bot: BotListItem; onRefresh: () => voi
       const res = await fetch(url, { method });
       if (!res.ok) {
         const err = await res.json();
-        if (err.error === "PLAN_LIMIT") {
-          toast.error(err.message);
-          return;
-        }
+        if (err.error === "PLAN_LIMIT") { toast.error(err.message); return; }
         throw new Error(err.error);
       }
 
-      const messages = {
-        start: "Bot started",
-        stop: "Bot stopped",
-        tick: undefined, // show tick result inline
-        delete: "Bot deleted",
-      };
-
       if (action === "tick") {
         const data = await res.json();
-        toast.info(`Tick: ${data.result}`);
-      } else if (messages[action]) {
-        toast.success(messages[action]);
+        const result = data.result as string;
+        if (result.startsWith("BUY opened")) toast.success(`Trade opened: ${result}`);
+        else if (result.startsWith("BUY closed")) toast.success(`Trade closed: ${result}`);
+        else toast.info(`Tick: ${result}`);
+      } else {
+        const msgs: Record<string, string> = { start: "Bot started", stop: "Bot stopped", delete: "Bot deleted" };
+        toast.success(msgs[action]);
       }
 
       onRefresh();
@@ -118,7 +147,7 @@ function BotActions({ bot, onRefresh }: { bot: BotListItem; onRefresh: () => voi
         <button
           onClick={() => act("tick")}
           disabled={loading !== null}
-          title="Simulate tick"
+          title="Trigger tick now"
           className="h-7 w-7 flex items-center justify-center rounded-md text-primary-400 hover:bg-primary-500/10 transition-colors disabled:opacity-40"
         >
           {loading === "tick" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
@@ -214,15 +243,33 @@ export default function BotsPage() {
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json() as Promise<{ bots: BotListItem[]; total: number }>;
     },
+    refetchInterval: 10_000, // refresh trade counts every 10 s
   });
 
-  function refresh() {
+  const refresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["bots"] });
+    queryClient.invalidateQueries({ queryKey: ["trades"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-  }
+  }, [queryClient]);
+
+  const handleTick = useCallback(
+    (botId: string, result: string) => {
+      if (result.startsWith("BUY opened")) {
+        toast.success(`🟢 Trade opened: ${result}`, { duration: 6000 });
+      } else if (result.startsWith("BUY closed")) {
+        toast.success(`💰 Trade closed: ${result}`, { duration: 6000 });
+      }
+      refresh();
+    },
+    [refresh]
+  );
+
+  const bots = data?.bots ?? [];
+  const hasRunning = bots.some((b) => b.status === "RUNNING");
+
+  useAutoTick(bots, handleTick);
 
   const columns = useColumns(refresh);
-  const bots = data?.bots ?? [];
 
   return (
     <div>
@@ -256,10 +303,15 @@ export default function BotsPage() {
           </div>
         ) : (
           <>
-            <p className="text-[12px] text-slate-600 mb-4">
-              Click <span className="text-primary-400">⚡</span> to simulate a price tick (dev) —
-              start/stop with the play/stop buttons.
-            </p>
+            {hasRunning && (
+              <div className="mb-4 flex items-center gap-2 rounded-lg border border-profit-400/20 bg-profit-400/5 px-3 py-2.5 text-[13px] text-profit-400">
+                <Radio className="h-3.5 w-3.5 animate-pulse" />
+                <span>
+                  Auto-ticking every 30 seconds — trades will open and close automatically.
+                  Click <Zap className="inline h-3 w-3" /> to trigger a tick immediately.
+                </span>
+              </div>
+            )}
             <DataTable columns={columns} data={bots} searchPlaceholder="Search bots…" />
           </>
         )}

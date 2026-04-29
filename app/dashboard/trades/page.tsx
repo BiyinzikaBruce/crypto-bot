@@ -74,7 +74,10 @@ const columns: ColumnDef<TradeItem>[] = [
           {row.original.exitPrice.toFixed(5)}
         </span>
       ) : (
-        <span className="text-[13px] text-primary-400 font-medium">OPEN</span>
+        <span className="inline-flex items-center gap-1.5 text-[13px] text-profit-400 font-semibold">
+          <span className="h-1.5 w-1.5 rounded-full bg-profit-400 animate-pulse" />
+          LIVE
+        </span>
       ),
   },
   {
@@ -185,6 +188,7 @@ export default function TradesPage() {
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json() as Promise<TradesResponse>;
     },
+    refetchInterval: 10_000, // poll every 10 s to catch new/closed trades
   });
 
   const trades = data?.trades ?? [];
